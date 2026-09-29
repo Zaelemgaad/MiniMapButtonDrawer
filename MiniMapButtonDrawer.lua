@@ -3,7 +3,7 @@ _G.MiniMapButtonDrawer = MBF
 local previousMBFDB = IsAddOnLoaded("MinimapButtonFrame") and MBFDB or nil
 
 function MBF:IsEnabled()
-    return self.settings ~= nil
+    return self.initialized == true
 end
 
 function MBF:Initialize()
@@ -29,6 +29,7 @@ function MBF:Initialize()
     SLASH_MINIMAPBUTTONDRAWER1 = "/mbd"
     if not IsAddOnLoaded("MinimapButtonFrame") then SLASH_MINIMAPBUTTONDRAWER2 = "/mbf" end
     SlashCmdList.MINIMAPBUTTONDRAWER = function() self:OpenOptions() end
+    self.initialized = true
 end
 
 local events = CreateFrame("Frame")
@@ -40,6 +41,8 @@ events:RegisterEvent("DISPLAY_SIZE_CHANGED")
 events:SetScript("OnEvent", function(_, event, name)
     if event == "ADDON_LOADED" and name == addonName then
         MBF:Initialize()
+        -- Also works when enabled/loaded after PLAYER_LOGIN has already fired.
+        if IsLoggedIn() then events:SetScript("OnUpdate", function(_, elapsed) MBF:UpdateDrawer(elapsed) end) end
     elseif MBF:IsEnabled() then
         if event == "PLAYER_LOGIN" then
             events:SetScript("OnUpdate", function(_, elapsed) MBF:UpdateDrawer(elapsed) end)

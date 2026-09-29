@@ -24,7 +24,7 @@ function Layout.Calculate(edge, offset, count, size, width, height, page, tabThi
     if not vertical then normal, tangent = height, width end
     local gap, padding = max(3, floor(size / 8)), max(4, floor(size / 6))
     local pitch = size + gap
-    local thickness = Layout.Clamp(tabThickness or max(6, floor(size / 4)), 4, 24)
+    local thickness = Layout.Clamp(tabThickness or max(6, floor(size / 4)), 1, 24)
     local handleLength = min(tangent, floor(size * 1.6))
     local maxDepth, maxAlong = normal - thickness - 2 * padding, tangent - 2 * padding
     local maxPrimary = flipped and maxAlong or maxDepth
@@ -127,7 +127,7 @@ function Layout.MigrateProfile(old, width, height)
     for name, value in pairs(old.included or {}) do included[name] = value and true or nil end
     return {edge = edge, offset = Layout.Clamp(offset, 0, 1),
         size = Layout.Clamp(floor(size + 0.5), 20, 56),
-        tabThickness = Layout.Clamp(tonumber(old.tabThickness) or max(6, floor(size / 4)), 4, 24),
+        tabThickness = Layout.Clamp(tonumber(old.tabThickness) or max(6, floor(size / 4)), 1, 24),
         roundedTab = old.roundedTab == true,
         flipOrientation = old.flipOrientation == true, conflicts = conflicts,
         tabRed = Layout.Clamp(tonumber(old.tabRed) or 209, 0, 255),

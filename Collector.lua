@@ -106,16 +106,17 @@ function Collector:Add(button, container)
     button.MBFDrawerOwned = true
     button:SetScript("OnDragStart", nil)
     button:SetScript("OnDragStop", nil)
-    -- Position hooks enforce layout without deleting native event/click/tooltip handlers.
+    -- Reconcile after the owning addon finishes its Show/Refresh/position sequence.
+    -- OnShow/OnHide alone miss changes while an ancestor (our drawer) is hidden.
     if not self.hooked[button] then
         self.hooked[button] = true
-        for _, method in ipairs({"SetPoint", "ClearAllPoints", "SetParent", "SetScale"}) do
+        for _, method in ipairs({"SetPoint", "ClearAllPoints", "SetParent", "SetScale", "Show", "Hide"}) do
             hooksecurefunc(button, method, function()
                 local current = self.entries[button]
                 if current and not self.placing then
                     if not current.container and self.owner.Conflicts:HasCollector() then
                         self:Release(button)
-                    else self:Place(current) end
+                    else self.owner.layoutDirty = true end
                 end
             end)
         end

@@ -3,9 +3,12 @@ MBFDB, MiniMapButtonDrawerDB, MBF, MiniMapButtonDrawer = nil, nil, nil, nil
 MinimapButtonFrame, DragonUI_MinimapIconCollector, MBB_MinimapButtonFrame = nil, nil, nil
 DragonUI, MBB_Buttons = nil, nil
 local loadedAddons, disabled, reloads = {}, {}, 0
+local loggedIn=false
+IsLoggedIn=function() return loggedIn end
 IsAddOnLoaded=function(name) return loadedAddons[name] or false end
 GetAddOnMetadata=function(name) return name end
 DisableAddOn=function(name) disabled[name]=true end
+EnableAddOn=function(name) disabled[name]=false end
 ReloadUI=function() reloads=reloads+1 end
 UISpecialFrames={}
 SLASH_MINIMAPBUTTONDRAWER1, SLASH_MINIMAPBUTTONDRAWER2 = nil, nil
@@ -81,12 +84,21 @@ function Frame:SetPoint(...) self.points[1]={...} end
 function Frame:GetLeft() return self.points[1] and self.points[1][4] or 0 end
 function Frame:GetBottom() return self.points[1] and self.points[1][5] or 0 end
 function Frame:IsShown() return not self.hidden end
+function Frame:IsVisible() return self:IsShown() and (not self.parent or self.parent:IsVisible()) end
 local function Visibility(f,event)
  Fire(f,event)
  for _,c in ipairs({f:GetChildren()}) do if c:IsShown() then Visibility(c,event) end end
 end
-function Frame:Hide() if not self.hidden then self.hidden=true; Visibility(self,'OnHide') end end
-function Frame:Show() if self.hidden then self.hidden=false; Visibility(self,'OnShow') end end
+function Frame:Hide()
+ local visible=self:IsVisible()
+ self.hidden=true
+ if visible then Visibility(self,'OnHide') end
+end
+function Frame:Show()
+ local visible=self:IsVisible()
+ self.hidden=false
+ if not visible and self:IsVisible() then Visibility(self,'OnShow') end
+end
 function Frame:SetMinMaxValues(low,high) self.low,self.high=low,high end
 function Frame:SetValueStep(step) self.step=step end
 function Frame:SetValue(n) self.value=n; Fire(self,'OnValueChanged',n) end
@@ -129,6 +141,7 @@ InterfaceOptions_AddCategory=function(panel) categories[#categories+1]=panel end
 local opened
 InterfaceOptionsFrame_OpenToCategory=function(panel) opened=panel end
 local function Event(event,...)
+ if event=='PLAYER_LOGIN' then loggedIn=true end
  for _,frame in ipairs(frames) do if frame.events[event] then Fire(frame,'OnEvent',event,...) end end
 end
 local function Button(name,parent)

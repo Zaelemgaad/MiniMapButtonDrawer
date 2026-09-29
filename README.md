@@ -6,7 +6,7 @@ Moves addon minimap buttons into a neat drawer attached to the edge of your scre
 Hover to pull it out. Move away to tuck it back in. Drag the tab to any screen edge.
 
 Right-click the tab or type `/mbd` (`/mbf` also works) for button size, separate
-drawer/button transparency, RGB tab color, rounded corners, and tab thickness.
+drawer/button transparency, RGB tab color, rounded inner corners, and 1-24 px tab thickness.
 Flip orientation changes the drawer layout without moving or rotating its tab.
 
 Detects Minimap Button Frame, DragonUI and MBB. Choose to host a compatible

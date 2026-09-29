@@ -10,7 +10,9 @@ local adapters = {
         local cfg = DragonUI and DragonUI.db and DragonUI.db.profile and DragonUI.db.profile.minimap
         return cfg and cfg.collector_enabled ~= false
     end, disable = function()
-        DragonUI.db.profile.minimap.collector_enabled = false
+        if DragonUI and DragonUI.db then DragonUI.db.profile.minimap.collector_enabled = false end
+    end, enable = function()
+        if DragonUI and DragonUI.db then DragonUI.db.profile.minimap.collector_enabled = true end
     end, open = function(frame)
         local collector = DragonUI and DragonUI.MinimapCollector
         if collector and not frame.isOpen then collector:Toggle() end
@@ -27,6 +29,7 @@ local function Descendant(frame, root)
 end
 
 function Conflicts:CanHost(item)
+    if item.inactive then return true end
     if Drawer.Collector.HasProtectedControl(item.frame) then return false, "This container includes protected controls." end
     if item.adapter.members then
         for _, name in ipairs(item.adapter.members() or {}) do
@@ -40,6 +43,18 @@ end
 
 function Conflicts:HasCollector()
     return next(self.active) ~= nil
+end
+
+function Conflicts:Installed()
+    local result = {}
+    for _, adapter in ipairs(adapters) do
+        if IsAddOnLoaded(adapter.id) or (GetAddOnInfo and GetAddOnInfo(adapter.id)) then
+            result[#result + 1] = self.active[adapter.id] or {
+                id = adapter.id, title = adapter.id, adapter = adapter, frame = _G[adapter.frame], inactive = true,
+            }
+        end
+    end
+    return result
 end
 
 function Conflicts:Host(item)
@@ -60,6 +75,7 @@ function Conflicts:Host(item)
 end
 
 function Conflicts:Release(item)
+    if not item.frame then return end
     if not Drawer.Collector.entries[item.frame] then return end
     Drawer.Collector:Release(item.frame)
     if item.wasOpen == false and item.adapter.close then item.adapter.close() end
@@ -103,6 +119,11 @@ function Conflicts:Scan()
             elseif not choice.silent and not self.seen[item.id] then self:Prompt(item) end
         end
     end
+    if self.reviewing then
+        for _, item in ipairs(self.reviewItems or {}) do
+            if not self.seen[item.id] then self:Prompt(item) end
+        end
+    end
 end
 
 function Conflicts:Choose(action)
@@ -110,6 +131,16 @@ function Conflicts:Choose(action)
     local item = self.dialog.item
     if not item then return end
     local choice = {silent = self.dialog.never:GetChecked() and true or false, host = action == "host"}
+    if item.inactive and (choice.host or action == "disableDrawer") then
+        Drawer.settings.conflicts[item.id] = choice
+        EnableAddOn(item.id)
+        if item.adapter.enable then item.adapter.enable() end
+        if action == "disableDrawer" then DisableAddOn(addonName) end
+        self.dialog.item = nil
+        self.dialog:Hide()
+        ReloadUI()
+        return
+    end
     if choice.host and not self:Host(item) then self:Prompt(item, true); return end
     if not choice.host then self:Release(item) end
     Drawer.settings.conflicts[item.id] = choice
@@ -124,32 +155,32 @@ end
 
 function Conflicts:CreateDialog()
     local dialog = CreateFrame("Frame", "MiniMapButtonDrawerConflict", UIParent)
-    dialog:SetSize(440, 290)
-    dialog:SetPoint("CENTER")
+    dialog:SetSize(300, 166)
+    dialog:SetPoint("TOP", UIParent, "TOP", 0, -100)
     dialog:SetFrameStrata("DIALOG")
     dialog:EnableMouse(true)
     dialog:SetBackdrop({bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32,
         insets = {left = 8, right = 8, top = 8, bottom = 8}})
     dialog.text = dialog:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    dialog.text:SetPoint("TOPLEFT", 24, -22)
-    dialog.text:SetWidth(392)
+    dialog.text:SetPoint("TOPLEFT", 18, -18)
+    dialog.text:SetWidth(264)
     dialog.text:SetJustifyH("LEFT")
-    local function Button(text, y, action)
+    local function Button(text, x, y, action)
         local button = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-        button:SetSize(392, 24)
-        button:SetPoint("TOPLEFT", 24, y)
+        button:SetSize(130, 24)
+        button:SetPoint("TOPLEFT", x, y)
         button:SetText(text)
         button:SetScript("OnClick", function() Conflicts:Choose(action) end)
         return button
     end
-    dialog.host = Button("Put its container in the drawer", -104, "host")
-    dialog.disableDrawer = Button("Disable MiniMapButtonDrawer and reload", -134, "disableDrawer")
-    dialog.disableOther = Button("", -164, "disableOther")
-    dialog.leave = Button("Leave things as they are", -194, "ignore")
+    dialog.host = Button("Nest its container", 18, -68, "host")
+    dialog.leave = Button("Keep both as-is", 152, -68, "ignore")
+    dialog.disableOther = Button("Use drawer only", 18, -98, "disableOther")
+    dialog.disableDrawer = Button("Use other only", 152, -98, "disableDrawer")
     dialog.never = CreateFrame("CheckButton", "MiniMapButtonDrawerConflictNever", dialog, "UICheckButtonTemplate")
-    dialog.never:SetPoint("TOPLEFT", 20, -228)
-    _G.MiniMapButtonDrawerConflictNeverText:SetText("Don't ask again for this addon")
+    dialog.never:SetPoint("TOPLEFT", 14, -128)
+    _G.MiniMapButtonDrawerConflictNeverText:SetText("Don't ask again")
     dialog:SetScript("OnHide", function()
         local item = dialog.item
         if item then
@@ -159,7 +190,7 @@ function Conflicts:CreateDialog()
         end
         if self.reviewing then
             local pending = false
-            for id in pairs(self.active) do if not self.seen[id] then pending = true end end
+            for _, item in ipairs(self.reviewItems or {}) do if not self.seen[item.id] then pending = true end end
             self.reviewing = pending
         end
     end)
@@ -176,9 +207,17 @@ function Conflicts:Prompt(item, refresh)
     local canHost, reason = self:CanHost(item)
     dialog.item = item
     self.seen[item.id] = true
-    dialog.text:SetText(item.title .. " also collects minimap buttons.\n\n" ..
-        (reason or "Keep its layout inside the drawer, or choose which addon to use."))
-    dialog.disableOther:SetText("Disable " .. item.id .. (item.adapter.disable and " collector" or "") .. " and reload")
+    dialog.text:SetText(item.title .. (item.inactive and " collector is disabled.\n" or " also collects buttons.\n") ..
+        (reason and "Its container cannot be nested." or "Changing the active addon reloads the UI."))
+    dialog.host:SetText(item.inactive and "Enable and nest" or "Nest its container")
+    dialog:SetScript("OnEnter", function(frame)
+        if reason then
+            GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+            GameTooltip:SetText(reason, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    dialog:SetScript("OnLeave", function() GameTooltip:Hide() end)
     dialog.never:SetChecked((Drawer.settings.conflicts[item.id] or {}).silent)
     if canHost then dialog.host:Enable() else dialog.host:Disable() end
     dialog:Show()
@@ -186,6 +225,7 @@ end
 
 function Conflicts:Review()
     self.seen, self.reviewing = {}, true
+    self.reviewItems = self:Installed()
     self:Scan()
 end
 

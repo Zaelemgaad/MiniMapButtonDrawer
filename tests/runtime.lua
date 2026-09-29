@@ -35,6 +35,73 @@ for _,edge in ipairs({'LEFT','RIGHT','TOP','BOTTOM'}) do
 end
 ]])
 
+Test('A hidden drawer tracks cancel and re-enable without visibility events or stale minimap anchors', [[
+local button=Button('LibDBIcon10_TidyPlatesIcon')
+Scan()
+assert(not drawer.panel:IsShown() and #drawer.visible==1)
+local hiddenEvents=0
+button:HookScript('OnHide',function() hiddenEvents=hiddenEvents+1 end)
+button:Hide()
+assert(hiddenEvents==0 and drawer.layoutDirty)
+drawer:UpdateDrawer(0.01)
+assert(#drawer.visible==0)
+button:Show()
+button:ClearAllPoints()
+button:SetPoint('CENTER',Minimap,'CENTER',77,88)
+drawer:UpdateDrawer(0.01)
+assert(#drawer.visible==1)
+local slot=drawer.Collector.entries[button].slot
+assert(button:GetParent()==slot and select(2,button:GetPoint())==slot)
+for i=1,5 do
+ button:Hide(); drawer:UpdateDrawer(0.01); assert(#drawer.visible==0)
+ button:Show(); button:SetPoint('CENTER',Minimap,'CENTER',0,0)
+ drawer:UpdateDrawer(0.01); assert(#drawer.visible==1 and select(2,button:GetPoint())==slot)
+end
+]])
+
+Test('One-pixel tabs survive migration and only inward-facing corners use rounded textures', [[
+local p=drawer.Layout.MigrateProfile({tabThickness=1},1920,1080)
+assert(p.tabThickness==1 and drawer.thicknessSlider.low==1)
+drawer.settings.tabThickness=1; drawer.settings.roundedTab=true
+for _,edge in ipairs({'LEFT','RIGHT','TOP','BOTTOM'}) do
+ drawer.settings.edge=edge; drawer:RefreshLayout()
+ assert(drawer.layout.thickness==1)
+ for _,index in ipairs({1,3,7,9}) do
+  local row=math.floor((index-1)/3)+1; local column=(index-1)%3+1
+  local rounded=(edge=='LEFT' and column==3) or (edge=='RIGHT' and column==1)
+    or (edge=='TOP' and row==3) or (edge=='BOTTOM' and row==1)
+  local texture=drawer.handleArt[index][1]:GetTexture()
+  assert((texture:find('TabCircle',1,true)~=nil)==rounded)
+ end
+end
+]])
+
+Test('Disabled collectors remain reviewable and can be explicitly re-enabled for hosting', [[
+loadedAddons.DragonUI=true
+DragonUI={db={profile={minimap={collector_enabled=false}}}}
+Scan()
+assert(not drawer.Conflicts:HasCollector())
+Fire(drawer.optionsPanel,'OnShow'); assert(drawer.collectorsButton.enabled)
+drawer.Conflicts:Review()
+assert(drawer.Conflicts.dialog.item.inactive)
+local dialog=drawer.Conflicts.dialog
+assert(dialog.width==300 and dialog.height==166 and dialog.points[1][1]=='TOP')
+Fire(dialog.host,'OnClick')
+assert(DragonUI.db.profile.minimap.collector_enabled and drawer.settings.conflicts.DragonUI.host)
+assert(reloads==1 and not disabled.MiniMapButtonDrawer)
+]])
+
+Test('Drawer animation loop starts even when the addon loads after player login', [[
+Event('PLAYER_LOGIN')
+Event('ADDON_LOADED','MiniMapButtonDrawer')
+assert(drawer:IsEnabled())
+local running=false
+for _,frame in ipairs(frames) do
+ if frame.events.ADDON_LOADED and frame:GetScript('OnUpdate') then running=true end
+end
+assert(running)
+]],true)
+
 Test('Named collector detection reserves its buttons and hosts the whole container', [[
 loadedAddons.MinimapButtonFrame=true
 local container=CreateFrame('Frame','MinimapButtonFrame',UIParent)

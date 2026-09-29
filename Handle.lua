@@ -28,7 +28,10 @@ function Drawer:ApplyHandleAppearance()
                     texture:SetPoint("TOPLEFT", self.handle, "TOPLEFT", xs[column], -ys[row])
                     texture:SetWidth(w)
                     texture:SetHeight(h)
-                    if column ~= 2 and row ~= 2 then
+                    local edge = self.settings.edge
+                    local inward = (edge == "LEFT" and column == 3) or (edge == "RIGHT" and column == 1)
+                        or (edge == "TOP" and row == 3) or (edge == "BOTTOM" and row == 1)
+                    if column ~= 2 and row ~= 2 and inward then
                         texture:SetTexture(CIRCLE)
                         local u, v = column == 1 and 0 or 0.5, row == 1 and 0 or 0.5
                         texture:SetTexCoord(u, u + 0.5, v, v + 0.5)
