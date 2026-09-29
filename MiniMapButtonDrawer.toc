@@ -2,7 +2,7 @@
 ## Title: MiniMapButtonDrawer
 ## Notes: Edge-docked drawer for minimap addon buttons.
 ## Author: AddonsEX; original Minimap Button Frame by Bachlott
-## Version: 4.2.0
+## Version: 4.2.1
 ## OptionalDeps: MinimapButtonFrame
 ## SavedVariables: MiniMapButtonDrawerDB, MBFDB
 

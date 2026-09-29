@@ -170,3 +170,17 @@ drawer.Conflicts:Review(); Fire(drawer.Conflicts.dialog.disableOther,'OnClick')
 assert(DragonUI.db.profile.minimap.collector_enabled==false and not disabled.DragonUI and reloads==1)
 Scan(); assert(not drawer.Conflicts:HasCollector())
 ]])
+
+Test('Settings review can reopen every dismissed collector, not only the first', [[
+loadedAddons.MinimapButtonFrame,loadedAddons.MBB=true,true
+CreateFrame('Frame','MinimapButtonFrame',UIParent)
+CreateFrame('Frame','MBB_MinimapButtonFrame',Minimap)
+drawer.settings.conflicts={MinimapButtonFrame={silent=true},MBB={silent=true}}
+Scan(); assert(not drawer.Conflicts.dialog)
+drawer.Conflicts:Review()
+assert(drawer.Conflicts.dialog.item.id=='MinimapButtonFrame')
+Fire(drawer.Conflicts.dialog.leave,'OnClick'); Scan()
+assert(drawer.Conflicts.dialog.item.id=='MBB')
+Fire(drawer.Conflicts.dialog.leave,'OnClick'); Scan()
+assert(not drawer.Conflicts.dialog:IsShown())
+]])

@@ -93,7 +93,9 @@ function Conflicts:Scan()
         local item = self.active[adapter.id]
         if item then
             local choice = Drawer.settings.conflicts[item.id] or {}
-            if choice.host then
+            if self.reviewing and not self.seen[item.id] then
+                self:Prompt(item)
+            elseif choice.host then
                 if not self:Host(item) then
                     self:Release(item)
                     if not self.seen[item.id] then self:Prompt(item) end
@@ -155,6 +157,11 @@ function Conflicts:CreateDialog()
             choice.silent = dialog.never:GetChecked() and true or false
             Drawer.settings.conflicts[item.id] = choice
         end
+        if self.reviewing then
+            local pending = false
+            for id in pairs(self.active) do if not self.seen[id] then pending = true end end
+            self.reviewing = pending
+        end
     end)
     UISpecialFrames[#UISpecialFrames + 1] = "MiniMapButtonDrawerConflict"
     dialog:Hide()
@@ -178,11 +185,8 @@ function Conflicts:Prompt(item, refresh)
 end
 
 function Conflicts:Review()
-    self.seen = {}
+    self.seen, self.reviewing = {}, true
     self:Scan()
-    for _, adapter in ipairs(adapters) do
-        if self.active[adapter.id] then self:Prompt(self.active[adapter.id], true); return end
-    end
 end
 
 function Conflicts:Initialize()
