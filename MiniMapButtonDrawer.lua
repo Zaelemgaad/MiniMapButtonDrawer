@@ -1,14 +1,15 @@
 local addonName, MBF = ...
-_G.MBF = MBF
 _G.MiniMapButtonDrawer = MBF
+local previousMBFDB = IsAddOnLoaded("MinimapButtonFrame") and MBFDB or nil
 
 function MBF:IsEnabled()
     return self.settings ~= nil
 end
 
 function MBF:Initialize()
-    local old = type(MBFDB) == "table" and MBFDB or {}
-    local db = {version = 5, profiles = {}, profileKeys = {}}
+    local old = type(MiniMapButtonDrawerDB) == "table" and MiniMapButtonDrawerDB
+        or (type(MBFDB) == "table" and MBFDB.version and MBFDB.version >= 4 and MBFDB) or {}
+    local db = {version = 6, profiles = {}, profileKeys = {}}
     local width, height = UIParent:GetWidth(), UIParent:GetHeight()
     for name, profile in pairs(old.profiles or {}) do
         db.profiles[name] = self.Layout.MigrateProfile(profile, width, height)
@@ -18,14 +19,16 @@ function MBF:Initialize()
     local profileName = db.profileKeys[character] or "Default"
     db.profileKeys[character] = profileName
     db.profiles[profileName] = db.profiles[profileName] or self.Layout.MigrateProfile({}, width, height)
-    MBFDB, self.settings = db, db.profiles[profileName]
+    MiniMapButtonDrawerDB, self.settings = db, db.profiles[profileName]
+    MBFDB = previousMBFDB
     self:CreateDrawer()
     self.Collector:Initialize(self)
+    self.Conflicts:Initialize()
     self:CreateOptions()
     self:RefreshLayout()
-    SLASH_MBF1 = "/mbf"
-    SLASH_MBF2 = "/mbd"
-    SlashCmdList.MBF = function() self:OpenOptions() end
+    SLASH_MINIMAPBUTTONDRAWER1 = "/mbd"
+    if not IsAddOnLoaded("MinimapButtonFrame") then SLASH_MINIMAPBUTTONDRAWER2 = "/mbf" end
+    SlashCmdList.MINIMAPBUTTONDRAWER = function() self:OpenOptions() end
 end
 
 local events = CreateFrame("Frame")

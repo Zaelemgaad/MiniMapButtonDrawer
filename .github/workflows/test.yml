@@ -10,3 +10,17 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y lua5.1
       - run: find . -name '*.lua' -print0 | xargs -0 -n1 luac5.1 -p
       - run: lua5.1 tests/run.lua
+      - run: lua5.1 tests/runtime.lua
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: git archive --format=zip --prefix=MiniMapButtonDrawer/ HEAD -o MiniMapButtonDrawer.zip
+      - run: gh release create "$RELEASE_TAG" MiniMapButtonDrawer.zip --verify-tag --generate-notes --title "$RELEASE_TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}

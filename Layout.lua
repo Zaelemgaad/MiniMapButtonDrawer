@@ -1,7 +1,7 @@
 local _, MBF = ...
 local Layout = {}
 MBF.Layout = Layout
-local min, max, floor, ceil = math.min, math.max, math.floor, math.ceil
+local min, max, floor = math.min, math.max, math.floor
 
 function Layout.Clamp(value, low, high)
     return max(low, min(high, value))
@@ -18,7 +18,7 @@ function Layout.NearestEdge(x, y, width, height, preferred)
     return edge, Layout.Clamp(offset, 0, 1)
 end
 
-function Layout.Calculate(edge, offset, count, size, width, height, page, tabThickness)
+function Layout.Calculate(edge, offset, count, size, width, height, page, tabThickness, flipped, dimensions)
     local vertical = edge == "LEFT" or edge == "RIGHT"
     local normal, tangent = width, height
     if not vertical then normal, tangent = height, width end
@@ -26,38 +26,64 @@ function Layout.Calculate(edge, offset, count, size, width, height, page, tabThi
     local pitch = size + gap
     local thickness = Layout.Clamp(tabThickness or max(6, floor(size / 4)), 4, 24)
     local handleLength = min(tangent, floor(size * 1.6))
-    local maxDepth = max(1, floor((normal - thickness - 2 * padding + gap) / pitch))
-    local maxAlong = max(1, floor((tangent - 2 * padding + gap) / pitch))
-    local capacity = maxDepth * maxAlong
-    local pages = max(1, ceil(count / capacity))
-    page = Layout.Clamp(page or 1, 1, pages)
-    local first = (page - 1) * capacity + 1
-    local visible = min(capacity, max(0, count - first + 1))
-    local depthCells = min(maxDepth, max(min(10, visible), ceil(visible / maxAlong)))
-    local alongCells = depthCells > 0 and ceil(visible / depthCells) or 0
-    local depth = visible > 0 and 2 * padding + depthCells * pitch - gap or 0
-    local along = visible > 0 and 2 * padding + alongCells * pitch - gap or 0
+    local maxDepth, maxAlong = normal - thickness - 2 * padding, tangent - 2 * padding
+    local maxPrimary = flipped and maxAlong or maxDepth
+    local maxSecondary = flipped and maxDepth or maxAlong
+    local limit = min(maxPrimary, 10 * pitch - gap)
+    local sizes = {}
+    for index = 1, count do
+        local requested = dimensions and dimensions[index]
+        local w, h = requested and requested.width or size, requested and requested.height or size
+        local d, a = vertical and w or h, vertical and h or w
+        local scale = min(1, maxDepth / d, maxAlong / a)
+        d, a = d * scale, a * scale
+        local p, s = flipped and a or d, flipped and d or a
+        sizes[index] = {p = p, s = s, d = d, a = a, scale = scale}
+        limit = max(limit, p)
+    end
+    local sheets = {{first = 1, last = 0, cells = {}, depth = 0, along = 0}}
+    local sheet, p, s, rowHeight = sheets[1], 0, 0, 0
+    for index, cell in ipairs(sizes) do
+        if p > 0 and p + cell.p > limit + 0.001 then
+            p, s, rowHeight = 0, s + rowHeight + gap, 0
+        end
+        if s + cell.s > maxSecondary + 0.001 and sheet.last >= sheet.first then
+            sheet = {first = index, last = index - 1, cells = {}, depth = 0, along = 0}
+            sheets[#sheets + 1] = sheet
+            p, s, rowHeight = 0, 0, 0
+        end
+        local d, a = flipped and s or p, flipped and p or s
+        sheet.cells[#sheet.cells + 1] = {d = d, a = a, size = cell}
+        sheet.last = index
+        sheet.depth, sheet.along = max(sheet.depth, d + cell.d), max(sheet.along, a + cell.a)
+        p, rowHeight = p + cell.p + gap, max(rowHeight, cell.s)
+    end
+    page = Layout.Clamp(page or 1, 1, #sheets)
+    sheet = sheets[page]
+    local depth = count > 0 and sheet.depth + 2 * padding or 0
+    local along = count > 0 and sheet.along + 2 * padding or 0
     local handleCenter = Layout.Clamp(offset * tangent, handleLength / 2, tangent - handleLength / 2)
     local start = Layout.Clamp(handleCenter - along / 2, 0, tangent - along)
     local result = {
         edge = edge, vertical = vertical, thickness = thickness, handleLength = handleLength,
         center = handleCenter, start = start, depth = depth, along = along,
         width = vertical and depth or along, height = vertical and along or depth,
-        page = page, pages = pages, first = first, last = first + visible - 1, cells = {},
+        page = page, pages = #sheets, first = sheet.first, last = sheet.last, cells = {},
     }
-    for index = 1, visible do
-        local d, a = (index - 1) % depthCells, floor((index - 1) / depthCells)
+    for index, packed in ipairs(sheet.cells) do
+        local d, a, cell = packed.d, packed.a, packed.size
         local x, y
         if vertical then
-            x = padding + d * pitch
-            if edge == "RIGHT" then x = depth - padding - size - d * pitch end
-            y = along - padding - size - a * pitch
+            x = padding + d
+            if edge == "RIGHT" then x = depth - padding - cell.d - d end
+            y = along - padding - cell.a - a
         else
-            x = padding + a * pitch
-            y = padding + d * pitch
-            if edge == "TOP" then y = depth - padding - size - d * pitch end
+            x = padding + a
+            y = padding + d
+            if edge == "TOP" then y = depth - padding - cell.d - d end
         end
-        result.cells[index] = {x = x, y = y}
+        result.cells[index] = {x = x, y = y, width = vertical and cell.d or cell.a,
+            height = vertical and cell.a or cell.d, scale = cell.scale}
     end
     return result
 end
@@ -89,6 +115,12 @@ function Layout.MigrateProfile(old, width, height)
     local transparency = tonumber(old.transparency)
     if not transparency then transparency = oldOpacity and (1 - oldOpacity) * 100 or 20 end
     local excluded, included = {}, {}
+    local conflicts = {}
+    for id, choice in pairs(type(old.conflicts) == "table" and old.conflicts or {}) do
+        if type(id) == "string" and type(choice) == "table" then
+            conflicts[id] = {host = choice.host == true, silent = choice.silent == true}
+        end
+    end
     for _, name in ipairs(old.MBF_Ignore or {}) do excluded[name] = true end
     for _, name in ipairs(old.MBF_Include or {}) do included[name] = true end
     for name, value in pairs(old.excluded or {}) do excluded[name] = value and true or nil end
@@ -97,6 +129,7 @@ function Layout.MigrateProfile(old, width, height)
         size = Layout.Clamp(floor(size + 0.5), 20, 56),
         tabThickness = Layout.Clamp(tonumber(old.tabThickness) or max(6, floor(size / 4)), 4, 24),
         roundedTab = old.roundedTab == true,
+        flipOrientation = old.flipOrientation == true, conflicts = conflicts,
         tabRed = Layout.Clamp(tonumber(old.tabRed) or 209, 0, 255),
         tabGreen = Layout.Clamp(tonumber(old.tabGreen) or 166, 0, 255),
         tabBlue = Layout.Clamp(tonumber(old.tabBlue) or 64, 0, 255),

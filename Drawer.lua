@@ -38,8 +38,12 @@ function MBF:RefreshLayout()
     self.width, self.height = UIParent:GetWidth(), UIParent:GetHeight()
     self.visible = self.Collector:VisibleEntries()
     local settings = self.settings
+    local dimensions = {}
+    for index, entry in ipairs(self.visible) do
+        dimensions[index] = self.Collector:Measure(entry)
+    end
     local layout = Layout.Calculate(settings.edge, settings.offset, #self.visible,
-        settings.size, self.width, self.height, self.page, settings.tabThickness)
+        settings.size, self.width, self.height, self.page, settings.tabThickness, settings.flipOrientation, dimensions)
     self.layout, self.page = layout, layout.page
     self.panel:SetSize(math.max(1, layout.width), math.max(1, layout.height))
     self.handle:ClearAllPoints()
@@ -57,7 +61,8 @@ function MBF:RefreshLayout()
     for index = layout.first, layout.last do
         local entry, cell = self.visible[index], layout.cells[index - layout.first + 1]
         entry.onPage = true
-        entry.slot:SetSize(settings.size, settings.size)
+        entry.fitScale = cell.scale
+        entry.slot:SetSize(cell.width, cell.height)
         entry.slot:ClearAllPoints()
         entry.slot:SetPoint("BOTTOMLEFT", self.panel, "BOTTOMLEFT", cell.x, cell.y)
         self.Collector:Place(entry)
@@ -75,7 +80,9 @@ end
 
 function MBF:SetOpen(open)
     if not self.layout or self.protectedInCombat then return end
-    self.target = open and #self.visible > 0 and 1 or 0
+    local target = open and #self.visible > 0 and 1 or 0
+    if target == 1 and self.target ~= 1 then self.Conflicts:OpenContainers() end
+    self.target = target
     if self.target == 1 and not self.panel:IsShown() then self.panel:Show() end
 end
 

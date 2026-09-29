@@ -45,6 +45,7 @@ function Collector.HasProtectedControl(frame)
 end
 
 function Collector:IsCandidate(frame)
+    if self.owner.Conflicts:HasCollector() then return false end
     if self.entries[frame] or frame.MBFDrawerOwned or not frame:IsShown() then return false end
     local kind, name = frame:GetObjectType(), frame:GetName() or ""
     if kind ~= "Button" and kind ~= "Frame" then return false end
@@ -80,18 +81,23 @@ function Collector:Place(entry)
     button:SetParent(slot)
     button:SetFrameStrata(self.owner.panel:GetFrameStrata())
     button:SetFrameLevel(slot:GetFrameLevel() + 1)
-    button:SetScale(self.owner.settings.size / math.max(button:GetWidth(), button:GetHeight(), 1))
+    local scale = entry.container and entry.original.uiScale * (entry.fitScale or 1)
+        or self.owner.settings.size * (entry.fitScale or 1) / math.max(button:GetWidth(), button:GetHeight(), 1)
+    button:SetScale(scale)
     button:ClearAllPoints()
-    button:SetPoint("CENTER", slot, "CENTER", 0, 0)
+    if entry.container then
+        button:SetPoint("BOTTOMLEFT", slot, "BOTTOMLEFT", -(entry.left or 0) * scale, -(entry.bottom or 0) * scale)
+    else button:SetPoint("CENTER", slot, "CENTER", 0, 0) end
     self.placing = false
 end
 
-function Collector:Add(button)
+function Collector:Add(button, container)
     if InCombatLockdown() or self.entries[button] then return end
     local slot = CreateFrame("Frame", nil, self.owner.panel)
     slot:SetFrameLevel(self.owner.panel:GetFrameLevel() + 1)
-    local entry = {button = button, slot = slot, original = {
+    local entry = {button = button, slot = slot, container = container, original = {
         parent = button:GetParent(), scale = button:GetScale(), level = button:GetFrameLevel(),
+        uiScale = button:GetEffectiveScale() / UIParent:GetEffectiveScale(), shown = button:IsShown(),
         strata = button:GetFrameStrata(), dragStart = button:GetScript("OnDragStart"),
         dragStop = button:GetScript("OnDragStop"), points = {},
     }}
@@ -106,7 +112,11 @@ function Collector:Add(button)
         for _, method in ipairs({"SetPoint", "ClearAllPoints", "SetParent", "SetScale"}) do
             hooksecurefunc(button, method, function()
                 local current = self.entries[button]
-                if current and not self.placing then self:Place(current) end
+                if current and not self.placing then
+                    if not current.container and self.owner.Conflicts:HasCollector() then
+                        self:Release(button)
+                    else self:Place(current) end
+                end
             end)
         end
         local function changed()
@@ -115,6 +125,12 @@ function Collector:Add(button)
         button:HookScript("OnShow", changed)
         button:HookScript("OnHide", changed)
         button:HookScript("OnSizeChanged", changed)
+        if button.StartMoving and button.StopMovingOrSizing then
+            hooksecurefunc(button, "StartMoving", function()
+                local current = self.entries[button]
+                if current and current.container and not InCombatLockdown() then button:StopMovingOrSizing() end
+            end)
+        end
     end
     self:Place(entry)
     self.owner.layoutDirty = true
@@ -123,7 +139,7 @@ end
 function Collector:VisibleEntries()
     local result = {}
     for button, entry in pairs(self.entries) do
-        if button:IsShown() then result[#result + 1] = entry end
+        if entry.container or button:IsShown() then result[#result + 1] = entry end
     end
     table.sort(result, function(a, b)
         local left, right = a.button:GetName() or "", b.button:GetName() or ""
@@ -131,6 +147,30 @@ function Collector:VisibleEntries()
         return left:lower() < right:lower()
     end)
     return result
+end
+
+function Collector:Measure(entry)
+    if not entry.container then return {width = self.owner.settings.size, height = self.owner.settings.size} end
+    local frame = entry.button
+    local left, bottom, right, top = 0, 0, frame:GetWidth(), frame:GetHeight()
+    local scale, x, y = frame:GetEffectiveScale(), frame:GetLeft(), frame:GetBottom()
+    -- Titles and controls can extend beyond their container's nominal rectangle.
+    local function Include(parent, depth)
+        if depth > 3 or not x or not y then return end
+        for _, child in ipairs({parent:GetChildren()}) do
+            if child:IsShown() and child:GetLeft() and child:GetBottom() then
+                local ratio = child:GetEffectiveScale() / scale
+                local cx, cy = child:GetLeft() * ratio - x, child:GetBottom() * ratio - y
+                left, bottom = math.min(left, cx), math.min(bottom, cy)
+                right, top = math.max(right, cx + child:GetWidth() * ratio), math.max(top, cy + child:GetHeight() * ratio)
+                Include(child, depth + 1)
+            end
+        end
+    end
+    Include(frame, 1)
+    entry.left, entry.bottom = left, bottom
+    return {width = math.max(1, right - left) * entry.original.uiScale,
+        height = math.max(1, top - bottom) * entry.original.uiScale}
 end
 
 function Collector:Release(button)
@@ -148,6 +188,9 @@ function Collector:Release(button)
     for _, point in ipairs(original.points) do button:SetPoint(unpack(point)) end
     button:SetScript("OnDragStart", original.dragStart)
     button:SetScript("OnDragStop", original.dragStop)
+    if entry.container then
+        if original.shown then button:Show() else button:Hide() end
+    end
     entry.slot:Hide()
     self.owner.layoutDirty = true
 end
@@ -162,6 +205,7 @@ function Collector:Update(elapsed)
     if not self.scanning then
         if self.delay > 0 and not self.rescan then return end
         self.rescan, self.scanning, self.cursor = false, true, nil
+        self.owner.Conflicts:Scan()
     end
     -- A bounded walk avoids GetChildren's huge multi-return on quest-pin-heavy minimaps.
     for _ = 1, 100 do

@@ -54,8 +54,22 @@ function MBF:CreateOptions()
         self.settings.roundedTab = button:GetChecked() and true or false
         self:ApplyHandleAppearance()
     end)
+    self.orientationToggle = CreateFrame("CheckButton", "MiniMapButtonDrawerOrientation", panel, "UICheckButtonTemplate")
+    self.orientationToggle:SetPoint("TOPLEFT", 18, -384)
+    _G.MiniMapButtonDrawerOrientationText:SetText("Flip orientation")
+    self.orientationToggle:SetScript("OnClick", function(button)
+        self.settings.flipOrientation = button:GetChecked() and true or false
+        self.page, self.layoutDirty = 1, true
+    end)
+    self.collectorsButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    self.collectorsButton:SetPoint("TOPLEFT", 24, -424)
+    self.collectorsButton:SetSize(260, 24)
+    self.collectorsButton:SetText("Other button collectors...")
+    self.collectorsButton:SetScript("OnClick", function() self.Conflicts:Review() end)
     local function SyncColor()
         self.roundedToggle:SetChecked(self.settings.roundedTab)
+        self.orientationToggle:SetChecked(self.settings.flipOrientation)
+        if self.Conflicts:HasCollector() then self.collectorsButton:Enable() else self.collectorsButton:Disable() end
         self.colorSwatch:SetVertexColor(self.settings.tabRed / 255, self.settings.tabGreen / 255, self.settings.tabBlue / 255)
     end
     panel:SetScript("OnShow", SyncColor)
@@ -64,6 +78,7 @@ function MBF:CreateOptions()
         self.settings.size, self.settings.transparency = 32, 20
         self.settings.buttonTransparency = 20
         self.settings.tabThickness, self.settings.roundedTab = 8, false
+        self.settings.flipOrientation = false
         self.settings.tabRed, self.settings.tabGreen, self.settings.tabBlue = 209, 166, 64
         self.sizeSlider:SetValue(32)
         self.transparencySlider:SetValue(20)
