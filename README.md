@@ -1,0 +1,20 @@
+# MiniMapButtonDrawer
+
+For **World of Warcraft 3.3.5a (Wrath, Interface 30300)**.
+
+Moves addon minimap buttons into a neat drawer attached to the edge of your screen.
+Hover to pull it out. Move away to tuck it back in. Drag the tab to any screen edge.
+
+Right-click the tab or type `/mbd` (`/mbf` also works) for button size, separate
+drawer/button transparency, RGB tab color, rounded corners, and tab thickness.
+
+## Install
+
+Put the `MiniMapButtonDrawer` folder in `Interface/AddOns`, then restart the game.
+No other addons required.
+
+Replacing MinimapButtonFrame? Exit first, remove the old addon folder, and rename
+each account's `WTF/Account/<account>/SavedVariables/MinimapButtonFrame.lua` to
+`MiniMapButtonDrawer.lua` to retain settings. Don't overwrite an existing new file.
+
+Original Minimap Button Frame by Bachlott; drawer rewrite by AddonsEX.

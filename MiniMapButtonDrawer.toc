@@ -1,0 +1,13 @@
+## Interface: 30300
+## Title: MiniMapButtonDrawer
+## Notes: Edge-docked drawer for minimap addon buttons.
+## Author: AddonsEX; original Minimap Button Frame by Bachlott
+## Version: 4.1.0
+## SavedVariables: MBFDB
+
+Layout.lua
+Collector.lua
+Handle.lua
+Drawer.lua
+Options.lua
+MiniMapButtonDrawer.lua
